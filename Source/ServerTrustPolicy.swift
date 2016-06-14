@@ -55,14 +55,14 @@ public class ServerTrustPolicyManager {
 
         - returns: The server trust policy for the given host if found.
     */
-    public func serverTrustPolicyForHost(host: String) -> ServerTrustPolicy? {
+    public func serverTrustPolicyForHost(_ host: String) -> ServerTrustPolicy? {
         return policies[host]
     }
 }
 
 // MARK: -
 
-extension NSURLSession {
+extension URLSession {
     private struct AssociatedKeys {
         static var ManagerKey = "NSURLSession.ServerTrustPolicyManager"
     }
@@ -127,11 +127,11 @@ public enum ServerTrustPolicy {
 
         - returns: All certificates within the given bundle.
     */
-    public static func certificatesInBundle(bundle: NSBundle = NSBundle.mainBundle()) -> [SecCertificate] {
+    public static func certificatesInBundle(bundle: Bundle = Bundle.main()) -> [SecCertificate] {
         var certificates: [SecCertificate] = []
 
         let paths = Set([".cer", ".CER", ".crt", ".CRT", ".der", ".DER"].map { fileExtension in
-            bundle.pathsForResourcesOfType(fileExtension, inDirectory: nil)
+            bundle.pathsForResources(ofType: fileExtension, inDirectory: nil)
         }.flatten())
 
         for path in paths {
@@ -153,10 +153,10 @@ public enum ServerTrustPolicy {
 
         - returns: All public keys within the given bundle.
     */
-    public static func publicKeysInBundle(bundle: NSBundle = NSBundle.mainBundle()) -> [SecKey] {
+    public static func publicKeysInBundle(bundle: Bundle = Bundle.main()) -> [SecKey] {
         var publicKeys: [SecKey] = []
 
-        for certificate in certificatesInBundle(bundle) {
+        for certificate in certificatesInBundle(bundle: bundle) {
             if let publicKey = publicKeyForCertificate(certificate) {
                 publicKeys.append(publicKey)
             }
@@ -175,18 +175,18 @@ public enum ServerTrustPolicy {
 
         - returns: Whether the server trust is valid.
     */
-    public func evaluateServerTrust(serverTrust: SecTrust, isValidForHost host: String) -> Bool {
+    public func evaluateServerTrust(_ serverTrust: SecTrust, isValidForHost host: String) -> Bool {
         var serverTrustIsValid = false
 
         switch self {
         case let .PerformDefaultEvaluation(validateHost):
-            let policy = SecPolicyCreateSSL(true, validateHost ? host as CFString : nil)
+            let policy = SecPolicyCreateSSL(true, validateHost ? host as CFString : nil)!
             SecTrustSetPolicies(serverTrust, [policy])
 
             serverTrustIsValid = trustIsValid(serverTrust)
         case let .PinCertificates(pinnedCertificates, validateCertificateChain, validateHost):
             if validateCertificateChain {
-                let policy = SecPolicyCreateSSL(true, validateHost ? host as CFString : nil)
+                let policy = SecPolicyCreateSSL(true, validateHost ? host as CFString : nil)!
                 SecTrustSetPolicies(serverTrust, [policy])
 
                 SecTrustSetAnchorCertificates(serverTrust, pinnedCertificates)
@@ -199,7 +199,7 @@ public enum ServerTrustPolicy {
 
                 outerLoop: for serverCertificateData in serverCertificatesDataArray {
                     for pinnedCertificateData in pinnedCertificatesDataArray {
-                        if serverCertificateData.isEqualToData(pinnedCertificateData) {
+                        if serverCertificateData.isEqual(to: pinnedCertificateData as Data) {
                             serverTrustIsValid = true
                             break outerLoop
                         }
@@ -210,7 +210,7 @@ public enum ServerTrustPolicy {
             var certificateChainEvaluationPassed = true
 
             if validateCertificateChain {
-                let policy = SecPolicyCreateSSL(true, validateHost ? host as CFString : nil)
+                let policy = SecPolicyCreateSSL(true, validateHost ? host as CFString : nil)!
                 SecTrustSetPolicies(serverTrust, [policy])
 
                 certificateChainEvaluationPassed = trustIsValid(serverTrust)
@@ -237,15 +237,15 @@ public enum ServerTrustPolicy {
 
     // MARK: - Private - Trust Validation
 
-    private func trustIsValid(trust: SecTrust) -> Bool {
+    private func trustIsValid(_ trust: SecTrust) -> Bool {
         var isValid = false
 
-        var result = SecTrustResultType(kSecTrustResultInvalid)
+        var result = SecTrustResultType.invalid
         let status = SecTrustEvaluate(trust, &result)
 
         if status == errSecSuccess {
-            let unspecified = SecTrustResultType(kSecTrustResultUnspecified)
-            let proceed = SecTrustResultType(kSecTrustResultProceed)
+            let unspecified = SecTrustResultType.unspecified
+            let proceed = SecTrustResultType.proceed
 
             isValid = result == unspecified || result == proceed
         }
@@ -255,7 +255,7 @@ public enum ServerTrustPolicy {
 
     // MARK: - Private - Certificate Data
 
-    private func certificateDataForTrust(trust: SecTrust) -> [NSData] {
+    private func certificateDataForTrust(_ trust: SecTrust) -> [NSData] {
         var certificates: [SecCertificate] = []
 
         for index in 0..<SecTrustGetCertificateCount(trust) {
@@ -267,13 +267,13 @@ public enum ServerTrustPolicy {
         return certificateDataForCertificates(certificates)
     }
 
-    private func certificateDataForCertificates(certificates: [SecCertificate]) -> [NSData] {
+    private func certificateDataForCertificates(_ certificates: [SecCertificate]) -> [NSData] {
         return certificates.map { SecCertificateCopyData($0) as NSData }
     }
 
     // MARK: - Private - Public Key Extraction
 
-    private static func publicKeysForTrust(trust: SecTrust) -> [SecKey] {
+    private static func publicKeysForTrust(_ trust: SecTrust) -> [SecKey] {
         var publicKeys: [SecKey] = []
 
         for index in 0..<SecTrustGetCertificateCount(trust) {
@@ -288,7 +288,7 @@ public enum ServerTrustPolicy {
         return publicKeys
     }
 
-    private static func publicKeyForCertificate(certificate: SecCertificate) -> SecKey? {
+    private static func publicKeyForCertificate(_ certificate: SecCertificate) -> SecKey? {
         var publicKey: SecKey?
 
         let policy = SecPolicyCreateBasicX509()
